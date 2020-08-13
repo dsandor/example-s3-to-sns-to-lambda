@@ -1,0 +1,6 @@
+samconfig.toml
+node_modules/
+.vscode/
+.idea/
+*.log
+.aws-sam/

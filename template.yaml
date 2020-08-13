@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub my-bucket-${AWS::AccountId}
+      NotificationConfiguration:
+        TopicConfigurations:
+          - Event: s3:ObjectCreated:*
+            Topic: !Ref S3ObjectChangeEvent
+          - Event: s3:ObjectRemoved:*
+            Topic: !Ref S3ObjectChangeEvent
+    DependsOn:
+      - BucketToSNSPermission
+
+  S3ObjectChangeEvent:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub S3ObjectChanged-Topic-${AWS::AccountId}
+  S3FileChangeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub s3-file-change-function
+      CodeUri: ./s3-file-change-function
+      Handler: index.handler
+      Runtime: nodejs12.x
+      MemorySize: 128
+      Timeout: 5
+      Tracing: Active
+      Policies:
+        - AWSXrayWriteOnlyAccess
+      Events:
+        Topic:
+          Type: SNS
+          Properties:
+            Topic: !Ref S3ObjectChangeEvent
+            Region: !Select
+              - 3
+              - !Split
+                - ':'
+                - !Ref S3ObjectChangeEvent
+
+  BucketToSNSPermission:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref S3ObjectChangeEvent
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:s3:::my-bucket-${AWS::AccountId}
+      Topics:
+        - !Ref S3ObjectChangeEvent
